@@ -33,7 +33,7 @@ class _LoginPageState extends State<LoginPage> {
     return Scaffold(
       appBar: AppBar(
         centerTitle: true,
-        title: Text('Login Prontuario Social'),
+        title: Text('Prontuario Social'),
       ),
       body: SingleChildScrollView(
         child: Padding(
