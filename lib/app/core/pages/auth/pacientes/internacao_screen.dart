@@ -15,7 +15,7 @@ class InternacaoScreen extends StatefulWidget {
 class _InternacaoScreenState extends State<InternacaoScreen> {
   final SupabaseClient supabase = Supabase.instance.client;
 
-  // Função para formatar datas para exibição
+  // Formatação de datas para exibição
   String formatarData(String data) {
     try {
       final DateTime parsedDate = DateTime.parse(data);
@@ -38,6 +38,78 @@ class _InternacaoScreenState extends State<InternacaoScreen> {
         'rn': internacao['rn'].isNotEmpty ? internacao['rn'][0] : null,
       };
     }).toList();
+  }
+
+  Future<void> _fecharInternacao(int internacaoId) async {
+    String? desfechoSelecionado;
+
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              title: const Text('Fechar Internação'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Escolha o motivo do fechamento:'),
+                  RadioListTile<String>(
+                    title: const Text('Alta'),
+                    value: 'Alta',
+                    groupValue: desfechoSelecionado,
+                    onChanged: (value) {
+                      setStateDialog(() {
+                        desfechoSelecionado = value;
+                      });
+                    },
+                  ),
+                  RadioListTile<String>(
+                    title: const Text('Transferência'),
+                    value: 'Transferencia',
+                    groupValue: desfechoSelecionado,
+                    onChanged: (value) {
+                      setStateDialog(() {
+                        desfechoSelecionado = value;
+                      });
+                    },
+                  ),
+                  RadioListTile<String>(
+                    title: const Text('Óbito'),
+                    value: 'Obito',
+                    groupValue: desfechoSelecionado,
+                    onChanged: (value) {
+                      setStateDialog(() {
+                        desfechoSelecionado = value;
+                      });
+                    },
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancelar'),
+                ),
+                TextButton(
+                  onPressed: () async {
+                    if (desfechoSelecionado != null) {
+                      await supabase.from('internacao').update({
+                        'desfecho': desfechoSelecionado,
+                      }).eq('id', internacaoId);
+
+                      Navigator.pop(context);
+                      setState(() {}); // Atualiza a interface
+                    }
+                  },
+                  child: const Text('Fechar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   Future<void> _cadastrarOuEditarInternacao(
@@ -81,20 +153,19 @@ class _InternacaoScreenState extends State<InternacaoScreen> {
                 }
 
                 if (isEdit) {
-                  // Atualiza internação existente
                   await supabase.from('internacao').update({
                     'tipo': tipoController.text,
                     'numero_leito':
                         int.tryParse(numeroLeitoController.text) ?? 0,
                   }).eq('id', internacao!['id']);
                 } else {
-                  // Cria nova internação
                   await supabase.from('internacao').insert({
                     'paciente_id': widget.pacienteId,
                     'tipo': tipoController.text,
                     'numero_leito':
                         int.tryParse(numeroLeitoController.text) ?? 0,
                     'data_internacao': DateTime.now().toIso8601String(),
+                    'desfecho': null,
                   });
                 }
 
@@ -107,35 +178,6 @@ class _InternacaoScreenState extends State<InternacaoScreen> {
         );
       },
     );
-  }
-
-  Future<void> _excluirInternacao(int internacaoId) async {
-    bool confirmado = await showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Confirmar Exclusão'),
-          content:
-              const Text('Tem certeza que deseja excluir esta internação?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancelar'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Excluir'),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (confirmado) {
-      await supabase.from('internacao').delete().eq('id', internacaoId);
-      await supabase.from('rn').delete().eq('internacao_id', internacaoId);
-      setState(() {});
-    }
   }
 
   @override
@@ -172,7 +214,7 @@ class _InternacaoScreenState extends State<InternacaoScreen> {
             itemCount: internacoes.length,
             itemBuilder: (context, index) {
               final internacao = internacoes[index];
-              final bool isParto = internacao['rn'] != null;
+              final bool isFechada = internacao['desfecho'] != null;
 
               return Card(
                 margin: const EdgeInsets.only(bottom: 10),
@@ -184,28 +226,27 @@ class _InternacaoScreenState extends State<InternacaoScreen> {
                       Text('🛏️ Tipo: ${internacao['tipo']}'),
                       Text(
                           '📅 Data: ${formatarData(internacao['data_internacao'])}'),
-                      if (isParto) ...[
-                        Text('👶 Nome do RN: ${internacao['rn']['nome_rn']}'),
-                        Text(
-                            '📅 Data do Parto: ${formatarData(internacao['rn']['data_parto'])}'),
-                      ],
+                      if (isFechada)
+                        Text('⚠ Desfecho: ${internacao['desfecho']}'),
                     ],
                   ),
                   trailing: Wrap(
                     spacing: 5,
                     children: [
+                      if (!isFechada)
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => _fecharInternacao(internacao['id']),
+                        ),
                       IconButton(
                         icon: const Icon(Icons.edit),
                         onPressed: () => _cadastrarOuEditarInternacao(
                             internacao: internacao),
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.delete),
-                        onPressed: () => _excluirInternacao(internacao['id']),
-                      ),
                     ],
                   ),
                   onTap: () {
+                    // Permite visualizar as evoluções, mas não adicionar novas se estiver fechada
                     Navigator.push(
                       context,
                       MaterialPageRoute(
