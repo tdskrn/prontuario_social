@@ -25,14 +25,6 @@ class _InternacaoScreenState extends State<InternacaoScreen> {
     }
   }
 
-  // Função para formatar entrada manual de data (ex: 09111995 → 09/11/1995)
-  String formatarEntradaData(String input) {
-    if (input.length == 8) {
-      return '${input.substring(0, 2)}/${input.substring(2, 4)}/${input.substring(4, 8)}';
-    }
-    return input;
-  }
-
   Future<List<Map<String, dynamic>>> _fetchInternacoesComRn() async {
     final response = await supabase
         .from('internacao')
@@ -48,16 +40,19 @@ class _InternacaoScreenState extends State<InternacaoScreen> {
     }).toList();
   }
 
-  Future<void> _editarInternacao(Map<String, dynamic> internacao) async {
-    final tipoController = TextEditingController(text: internacao['tipo']);
-    final numeroLeitoController =
-        TextEditingController(text: internacao['numero_leito'].toString());
+  Future<void> _cadastrarOuEditarInternacao(
+      {Map<String, dynamic>? internacao}) async {
+    bool isEdit = internacao != null;
+    final tipoController =
+        TextEditingController(text: isEdit ? internacao!['tipo'] : '');
+    final numeroLeitoController = TextEditingController(
+        text: isEdit ? internacao!['numero_leito'].toString() : '');
 
     await showDialog(
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text('Editar Internação'),
+          title: Text(isEdit ? 'Editar Internação' : 'Cadastrar Internação'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -80,10 +75,28 @@ class _InternacaoScreenState extends State<InternacaoScreen> {
             ),
             TextButton(
               onPressed: () async {
-                await supabase.from('internacao').update({
-                  'tipo': tipoController.text,
-                  'numero_leito': int.tryParse(numeroLeitoController.text) ?? 0,
-                }).eq('id', internacao['id']);
+                if (tipoController.text.isEmpty ||
+                    numeroLeitoController.text.isEmpty) {
+                  return;
+                }
+
+                if (isEdit) {
+                  // Atualiza internação existente
+                  await supabase.from('internacao').update({
+                    'tipo': tipoController.text,
+                    'numero_leito':
+                        int.tryParse(numeroLeitoController.text) ?? 0,
+                  }).eq('id', internacao!['id']);
+                } else {
+                  // Cria nova internação
+                  await supabase.from('internacao').insert({
+                    'paciente_id': widget.pacienteId,
+                    'tipo': tipoController.text,
+                    'numero_leito':
+                        int.tryParse(numeroLeitoController.text) ?? 0,
+                    'data_internacao': DateTime.now().toIso8601String(),
+                  });
+                }
 
                 Navigator.pop(context);
                 setState(() {});
@@ -125,86 +138,17 @@ class _InternacaoScreenState extends State<InternacaoScreen> {
     }
   }
 
-  Future<void> _editarRn(Map<String, dynamic> rn) async {
-    final nomeRnController = TextEditingController(text: rn['nome_rn']);
-    final dataPartoController =
-        TextEditingController(text: formatarData(rn['data_parto']));
-
-    await showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Editar Recém-Nascido'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nomeRnController,
-                decoration: const InputDecoration(labelText: 'Nome do RN'),
-              ),
-              TextField(
-                controller: dataPartoController,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  labelText: 'Data do Parto (dd/MM/yyyy)',
-                  prefixIcon: const Icon(Icons.calendar_today),
-                  suffixIcon: IconButton(
-                    icon: const Icon(Icons.date_range),
-                    onPressed: () async {
-                      DateTime? pickedDate = await showDatePicker(
-                        context: context,
-                        initialDate: DateTime.now(),
-                        firstDate: DateTime(1900),
-                        lastDate: DateTime.now(),
-                      );
-
-                      if (pickedDate != null) {
-                        String formattedDate =
-                            DateFormat('dd/MM/yyyy').format(pickedDate);
-                        setState(() {
-                          dataPartoController.text = formattedDate;
-                        });
-                      }
-                    },
-                  ),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancelar'),
-            ),
-            TextButton(
-              onPressed: () async {
-                await supabase.from('rn').update({
-                  'nome_rn': nomeRnController.text,
-                  'data_parto': DateFormat('yyyy-MM-dd').format(
-                      DateFormat('dd/MM/yyyy').parse(dataPartoController.text)),
-                }).eq('id', rn['id']);
-
-                Navigator.pop(context);
-                setState(() {});
-              },
-              child: const Text('Salvar'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Future<void> _excluirRn(int rnId) async {
-    await supabase.from('rn').delete().eq('id', rnId);
-    setState(() {});
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Internações'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.add),
+            onPressed: () => _cadastrarOuEditarInternacao(),
+          ),
+        ],
       ),
       body: FutureBuilder(
         future: _fetchInternacoesComRn(),
@@ -244,20 +188,22 @@ class _InternacaoScreenState extends State<InternacaoScreen> {
                         Text('👶 Nome do RN: ${internacao['rn']['nome_rn']}'),
                         Text(
                             '📅 Data do Parto: ${formatarData(internacao['rn']['data_parto'])}'),
-                        IconButton(
-                          icon: const Icon(Icons.edit),
-                          onPressed: () => _editarRn(internacao['rn']),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.delete),
-                          onPressed: () => _excluirRn(internacao['rn']['id']),
-                        ),
                       ],
                     ],
                   ),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.delete),
-                    onPressed: () => _excluirInternacao(internacao['id']),
+                  trailing: Wrap(
+                    spacing: 5,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.edit),
+                        onPressed: () => _cadastrarOuEditarInternacao(
+                            internacao: internacao),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete),
+                        onPressed: () => _excluirInternacao(internacao['id']),
+                      ),
+                    ],
                   ),
                   onTap: () {
                     Navigator.push(
