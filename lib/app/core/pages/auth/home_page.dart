@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:prontuario_social/app/core/pages/auth/controllers/login_controller.dart';
 
 import 'package:prontuario_social/app/core/pages/auth/pacientes/get_pacientes_page.dart';
+import 'package:prontuario_social/app/core/pages/relatorios/relatorios.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class HomePage extends StatefulWidget {
@@ -19,7 +20,7 @@ class _HomePageState extends State<HomePage> {
   int currentIndex = 0;
   List<Widget> pages = [
     PacientesScreen(),
-    PacientesScreen(),
+    RelatorioEvolucoesScreen(),
     Placeholder(),
   ];
 
@@ -69,9 +70,9 @@ class _HomePageState extends State<HomePage> {
           items: [
             BottomNavigationBarItem(
               icon: Icon(
-                Icons.home,
+                Icons.person,
               ),
-              label: 'Servidores',
+              label: 'Pacientes',
             ),
             BottomNavigationBarItem(
               icon: Icon(

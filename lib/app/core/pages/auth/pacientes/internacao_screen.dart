@@ -1,7 +1,34 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:prontuario_social/app/core/pages/auth/pacientes/evolucao_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'evolucao_screen.dart';
+
+enum Ala {
+  EnfermariaMasculina,
+  EnfermariaFeminina,
+  PediatriaAlojamentoConjunto,
+  Pediatria,
+  LeitosSaudeMental,
+}
+
+extension AlaExtension on Ala {
+  String get displayName {
+    switch (this) {
+      case Ala.EnfermariaMasculina:
+        return 'Enfermaria Masculina';
+      case Ala.EnfermariaFeminina:
+        return 'Enfermaria Feminina';
+      case Ala.PediatriaAlojamentoConjunto:
+        return 'Pediatria Alojamento Conjunto';
+      case Ala.Pediatria:
+        return 'Pediatria';
+      case Ala.LeitosSaudeMental:
+        return 'Leitos Saúde Mental';
+      default:
+        return toString().split('.').last;
+    }
+  }
+}
 
 class InternacaoScreen extends StatefulWidget {
   final int pacienteId;
@@ -15,7 +42,6 @@ class InternacaoScreen extends StatefulWidget {
 class _InternacaoScreenState extends State<InternacaoScreen> {
   final SupabaseClient supabase = Supabase.instance.client;
 
-  // Formatação de datas para exibição
   String formatarData(String data) {
     try {
       final DateTime parsedDate = DateTime.parse(data);
@@ -38,6 +64,151 @@ class _InternacaoScreenState extends State<InternacaoScreen> {
         'rn': internacao['rn'].isNotEmpty ? internacao['rn'][0] : null,
       };
     }).toList();
+  }
+
+  Future<void> _cadastrarOuEditarInternacao(
+      {Map<String, dynamic>? internacao}) async {
+    final TextEditingController leitoController = TextEditingController();
+    final TextEditingController diagnosticoController = TextEditingController();
+    final TextEditingController dataInternacaoController =
+        TextEditingController();
+    Ala? alaSelecionada;
+
+    if (internacao != null) {
+      leitoController.text = internacao['numero_leito']?.toString() ?? '';
+      diagnosticoController.text = internacao['diagnostico']?.toString() ?? '';
+      dataInternacaoController.text =
+          formatarData(internacao['data_internacao']?.toString() ?? '');
+      alaSelecionada = Ala.values.firstWhere(
+        (ala) => ala.toString() == 'Ala.${internacao['ala']}',
+        orElse: () => Ala.EnfermariaMasculina,
+      );
+    }
+
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              title: Text(internacao == null
+                  ? 'Adicionar Internação'
+                  : 'Editar Internação'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: leitoController,
+                      decoration: const InputDecoration(
+                        labelText: 'Número do Leito',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: diagnosticoController,
+                      decoration: const InputDecoration(
+                        labelText: 'Diagnóstico',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: dataInternacaoController,
+                      decoration: InputDecoration(
+                        labelText: 'Data de Internação',
+                        hintText: 'DD/MM/AAAA',
+                        prefixIcon: const Icon(Icons.calendar_today),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8.0),
+                        ),
+                        filled: true,
+                        fillColor: Colors.grey[200],
+                      ),
+                      onTap: () async {
+                        final DateTime? pickedDate = await showDatePicker(
+                          context: context,
+                          initialDate: DateTime.now(),
+                          firstDate: DateTime(2000),
+                          lastDate: DateTime(2100),
+                        );
+                        if (pickedDate != null) {
+                          dataInternacaoController.text =
+                              DateFormat('dd/MM/yyyy').format(pickedDate);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    DropdownButtonFormField<Ala>(
+                      value: alaSelecionada,
+                      onChanged: (Ala? value) {
+                        setStateDialog(() {
+                          alaSelecionada = value;
+                        });
+                      },
+                      items: Ala.values.map((Ala ala) {
+                        return DropdownMenuItem<Ala>(
+                          value: ala,
+                          child: Text(ala.displayName), // Texto formatado
+                        );
+                      }).toList(),
+                      decoration: const InputDecoration(
+                        labelText: 'Ala',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancelar'),
+                ),
+                TextButton(
+                  onPressed: () async {
+                    if (leitoController.text.isNotEmpty &&
+                        diagnosticoController.text.isNotEmpty &&
+                        dataInternacaoController.text.isNotEmpty &&
+                        alaSelecionada != null) {
+                      final Map<String, dynamic> novaInternacao = {
+                        'numero_leito': leitoController.text,
+                        'diagnostico': diagnosticoController.text,
+                        'data_internacao': DateFormat('yyyy-MM-dd').format(
+                            DateFormat('dd/MM/yyyy')
+                                .parse(dataInternacaoController.text)),
+                        'ala': alaSelecionada
+                            .toString()
+                            .split('.')
+                            .last, // Valor original
+                        'paciente_id': widget.pacienteId,
+                      };
+
+                      if (internacao == null) {
+                        await supabase
+                            .from('internacao')
+                            .insert([novaInternacao]);
+                      } else {
+                        final int internacaoId = internacao['id'] as int;
+                        await supabase
+                            .from('internacao')
+                            .update(novaInternacao)
+                            .eq('id', internacaoId);
+                      }
+
+                      Navigator.pop(context);
+                      setState(() {});
+                    }
+                  },
+                  child: const Text('Salvar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   Future<void> _fecharInternacao(int internacaoId) async {
@@ -99,7 +270,7 @@ class _InternacaoScreenState extends State<InternacaoScreen> {
                       }).eq('id', internacaoId);
 
                       Navigator.pop(context);
-                      setState(() {}); // Atualiza a interface
+                      setState(() {});
                     }
                   },
                   child: const Text('Fechar'),
@@ -112,86 +283,10 @@ class _InternacaoScreenState extends State<InternacaoScreen> {
     );
   }
 
-  Future<void> _cadastrarOuEditarInternacao(
-      {Map<String, dynamic>? internacao}) async {
-    bool isEdit = internacao != null;
-    final tipoController =
-        TextEditingController(text: isEdit ? internacao!['tipo'] : '');
-    final numeroLeitoController = TextEditingController(
-        text: isEdit ? internacao!['numero_leito'].toString() : '');
-
-    await showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text(isEdit ? 'Editar Internação' : 'Cadastrar Internação'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: tipoController,
-                decoration:
-                    const InputDecoration(labelText: 'Tipo de internação'),
-              ),
-              TextField(
-                controller: numeroLeitoController,
-                decoration: const InputDecoration(labelText: 'Número do leito'),
-                keyboardType: TextInputType.number,
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancelar'),
-            ),
-            TextButton(
-              onPressed: () async {
-                if (tipoController.text.isEmpty ||
-                    numeroLeitoController.text.isEmpty) {
-                  return;
-                }
-
-                if (isEdit) {
-                  await supabase.from('internacao').update({
-                    'tipo': tipoController.text,
-                    'numero_leito':
-                        int.tryParse(numeroLeitoController.text) ?? 0,
-                  }).eq('id', internacao!['id']);
-                } else {
-                  await supabase.from('internacao').insert({
-                    'paciente_id': widget.pacienteId,
-                    'tipo': tipoController.text,
-                    'numero_leito':
-                        int.tryParse(numeroLeitoController.text) ?? 0,
-                    'data_internacao': DateTime.now().toIso8601String(),
-                    'desfecho': null,
-                  });
-                }
-
-                Navigator.pop(context);
-                setState(() {});
-              },
-              child: const Text('Salvar'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Internações'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: () => _cadastrarOuEditarInternacao(),
-          ),
-        ],
-      ),
+      appBar: AppBar(title: const Text('Internações')),
       body: FutureBuilder(
         future: _fetchInternacoesComRn(),
         builder: (context, snapshot) {
@@ -204,7 +299,6 @@ class _InternacaoScreenState extends State<InternacaoScreen> {
           }
 
           final internacoes = snapshot.data as List;
-
           if (internacoes.isEmpty) {
             return const Center(child: Text('Nenhuma internação cadastrada.'));
           }
@@ -215,19 +309,49 @@ class _InternacaoScreenState extends State<InternacaoScreen> {
             itemBuilder: (context, index) {
               final internacao = internacoes[index];
               final bool isFechada = internacao['desfecho'] != null;
+              final Color cardColor = isFechada
+                  ? const Color.fromARGB(255, 104, 9, 2)
+                  : const Color.fromARGB(255, 239, 243, 14);
+              final Color textColor = isFechada ? Colors.white : Colors.black;
 
               return Card(
+                color: cardColor,
                 margin: const EdgeInsets.only(bottom: 10),
                 child: ListTile(
-                  title: Text('Leito: ${internacao['numero_leito']}'),
+                  title: Text(
+                    'Leito: ${internacao['numero_leito']}',
+                    style: TextStyle(
+                      color: textColor,
+                    ),
+                  ),
                   subtitle: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('🛏️ Tipo: ${internacao['tipo']}'),
                       Text(
-                          '📅 Data: ${formatarData(internacao['data_internacao'])}'),
+                        '🏥 Ala: ${Ala.values.firstWhere((ala) => ala.toString() == 'Ala.${internacao['ala']}').displayName}',
+                        style: TextStyle(
+                          color: textColor,
+                        ),
+                      ),
+                      Text(
+                        '📄 Diagnóstico: ${internacao['diagnostico']}',
+                        style: TextStyle(
+                          color: textColor,
+                        ),
+                      ),
+                      Text(
+                        '📅 Data: ${formatarData(internacao['data_internacao'])}',
+                        style: TextStyle(
+                          color: textColor,
+                        ),
+                      ),
                       if (isFechada)
-                        Text('⚠ Desfecho: ${internacao['desfecho']}'),
+                        Text(
+                          '⚠ Desfecho: ${internacao['desfecho']}',
+                          style: TextStyle(
+                            color: textColor,
+                          ),
+                        ),
                     ],
                   ),
                   trailing: Wrap(
@@ -246,7 +370,6 @@ class _InternacaoScreenState extends State<InternacaoScreen> {
                     ],
                   ),
                   onTap: () {
-                    // Permite visualizar as evoluções, mas não adicionar novas se estiver fechada
                     Navigator.push(
                       context,
                       MaterialPageRoute(
@@ -260,6 +383,10 @@ class _InternacaoScreenState extends State<InternacaoScreen> {
             },
           );
         },
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _cadastrarOuEditarInternacao(),
+        child: const Icon(Icons.add),
       ),
     );
   }

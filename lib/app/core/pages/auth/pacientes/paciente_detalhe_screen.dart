@@ -63,8 +63,6 @@ class _PacienteDetalhesScreenState extends State<PacienteDetalhesScreen> {
     final dataNascimentoController = TextEditingController(
         text: formatarData(widget.paciente['data_nascimento']));
     final sexoController = TextEditingController(text: widget.paciente['sexo']);
-    final diagnosticoController =
-        TextEditingController(text: widget.paciente['diagnostico']);
 
     await showDialog(
       context: context,
@@ -121,10 +119,6 @@ class _PacienteDetalhesScreenState extends State<PacienteDetalhesScreen> {
                   decoration: const InputDecoration(labelText: 'Sexo'),
                 ),
                 const SizedBox(height: 10),
-                TextField(
-                  controller: diagnosticoController,
-                  decoration: const InputDecoration(labelText: 'Diagnóstico'),
-                ),
               ],
             ),
           ),
@@ -145,14 +139,12 @@ class _PacienteDetalhesScreenState extends State<PacienteDetalhesScreen> {
                     'nome': nomeController.text,
                     'data_nascimento': formattedDate,
                     'sexo': sexoController.text,
-                    'diagnostico': diagnosticoController.text,
                   }).eq('id', widget.paciente['id']);
 
                   setState(() {
                     widget.paciente['nome'] = nomeController.text;
                     widget.paciente['data_nascimento'] = formattedDate;
                     widget.paciente['sexo'] = sexoController.text;
-                    widget.paciente['diagnostico'] = diagnosticoController.text;
                   });
                   Navigator.pop(context);
                 },
@@ -239,7 +231,6 @@ class _PacienteDetalhesScreenState extends State<PacienteDetalhesScreen> {
         const SizedBox(height: 10),
         _buildInfoRow('Sexo:', widget.paciente['sexo']),
         const SizedBox(height: 10),
-        _buildInfoRow('Diagnóstico:', widget.paciente['diagnostico']),
       ],
     );
   }

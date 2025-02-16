@@ -47,7 +47,7 @@ class _PacientesScreenState extends State<PacientesScreen> {
   Future<void> _criarPaciente() async {
     final nomeController = TextEditingController();
     final dataNascimentoController = TextEditingController();
-    final diagnosticoController = TextEditingController();
+
     String? sexoSelecionado;
 
     await showDialog(
@@ -122,13 +122,6 @@ class _PacientesScreenState extends State<PacientesScreen> {
                   ),
                 ),
                 const SizedBox(height: 10),
-                TextField(
-                  controller: diagnosticoController,
-                  decoration: const InputDecoration(
-                    labelText: 'Diagnóstico',
-                    prefixIcon: Icon(Icons.medical_services),
-                  ),
-                ),
               ],
             ),
           ),
@@ -141,8 +134,7 @@ class _PacientesScreenState extends State<PacientesScreen> {
               onPressed: () async {
                 if (nomeController.text.isEmpty ||
                     dataNascimentoController.text.isEmpty ||
-                    sexoSelecionado == null ||
-                    diagnosticoController.text.isEmpty) {
+                    sexoSelecionado == null) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text('Por favor, preencha todos os campos!'),
@@ -161,7 +153,6 @@ class _PacientesScreenState extends State<PacientesScreen> {
                   'nome': nomeController.text,
                   'data_nascimento': formattedDate,
                   'sexo': sexoSelecionado,
-                  'diagnostico': diagnosticoController.text,
                 });
 
                 Navigator.pop(context);

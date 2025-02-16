@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class EvolucaoScreen extends StatefulWidget {
@@ -13,64 +14,96 @@ class EvolucaoScreen extends StatefulWidget {
 class _EvolucaoScreenState extends State<EvolucaoScreen> {
   final SupabaseClient supabase = Supabase.instance.client;
 
-  Future<void> _adicionarEvolucao() async {
-    final evolucaoController = TextEditingController();
-    final statusController = TextEditingController();
+  String formatarData(String data) {
+    try {
+      final DateTime parsedDate = DateTime.parse(data);
+      return DateFormat('dd/MM/yyyy').format(parsedDate);
+    } catch (e) {
+      return 'Data inválida';
+    }
+  }
+
+  Future<void> _cadastrarOuEditarEvolucao(
+      {Map<String, dynamic>? evolucao}) async {
+    bool isEdit = evolucao != null;
+    final observacaoController =
+        TextEditingController(text: isEdit ? evolucao!['observacao'] : '');
+    DateTime selectedDate =
+        isEdit ? DateTime.parse(evolucao!['data_visita']) : DateTime.now();
 
     await showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          title: const Text('Adicionar Evolução'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: evolucaoController,
-                decoration:
-                    const InputDecoration(labelText: 'Descrição da evolução'),
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              title: Text(isEdit ? 'Editar Evolução' : 'Adicionar Evolução'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ListTile(
+                    title: Text(
+                        "Data da Visita: ${formatarData(selectedDate.toIso8601String())}"),
+                    trailing: const Icon(Icons.calendar_today),
+                    onTap: () async {
+                      DateTime? pickedDate = await showDatePicker(
+                        context: context,
+                        initialDate: selectedDate,
+                        firstDate: DateTime(2000),
+                        lastDate: DateTime.now(),
+                      );
+                      if (pickedDate != null && pickedDate != selectedDate) {
+                        setStateDialog(() {
+                          selectedDate = pickedDate;
+                        });
+                      }
+                    },
+                  ),
+                  TextField(
+                    controller: observacaoController,
+                    decoration: const InputDecoration(labelText: 'Observação'),
+                    maxLines: 4,
+                  ),
+                ],
               ),
-              TextField(
-                controller: statusController,
-                decoration:
-                    const InputDecoration(labelText: 'Status do paciente'),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancelar'),
-            ),
-            TextButton(
-              onPressed: () async {
-                if (evolucaoController.text.isNotEmpty &&
-                    statusController.text.isNotEmpty) {
-                  // Recupera o paciente_id baseado na internação
-                  final response = await supabase
-                      .from('internacao')
-                      .select('paciente_id')
-                      .eq('id', widget.internacaoId)
-                      .single();
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancelar'),
+                ),
+                TextButton(
+                  onPressed: () async {
+                    if (observacaoController.text.isNotEmpty) {
+                      if (isEdit) {
+                        await supabase.from('evolucao').update({
+                          'data_visita': selectedDate.toIso8601String(),
+                          'observacao': observacaoController.text,
+                        }).eq('id', evolucao!['id']);
+                      } else {
+                        final response = await supabase
+                            .from('internacao')
+                            .select('paciente_id')
+                            .eq('id', widget.internacaoId)
+                            .single();
 
-                  final pacienteId = response['paciente_id'];
+                        final pacienteId = response['paciente_id'];
 
-                  await supabase.from('evolucao').insert({
-                    'internacao_id': widget.internacaoId,
-                    'paciente_id': pacienteId,
-                    'data_visita': DateTime.now().toIso8601String(),
-                    'evolucao': evolucaoController.text,
-                    'status': statusController.text,
-                    'data_status': DateTime.now().toIso8601String(),
-                  });
-
-                  Navigator.pop(context);
-                  setState(() {}); // Atualiza a lista
-                }
-              },
-              child: const Text('Salvar'),
-            ),
-          ],
+                        await supabase.from('evolucao').insert({
+                          'internacao_id': widget.internacaoId,
+                          'paciente_id': pacienteId,
+                          'data_visita': selectedDate.toIso8601String(),
+                          'observacao': observacaoController.text,
+                        });
+                      }
+                      Navigator.pop(context);
+                      setState(() {});
+                    }
+                  },
+                  child: const Text('Salvar'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -85,7 +118,7 @@ class _EvolucaoScreenState extends State<EvolucaoScreen> {
             .from('evolucao')
             .select()
             .eq('internacao_id', widget.internacaoId)
-            .order('data_visita', ascending: false), // Ordena pela data
+            .order('data_visita', ascending: false),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -108,14 +141,13 @@ class _EvolucaoScreenState extends State<EvolucaoScreen> {
               return Card(
                 margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 child: ListTile(
-                  title: Text(evolucao['evolucao']),
-                  subtitle: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('📅 Data da visita: ${evolucao['data_visita']}'),
-                      Text('📌 Status: ${evolucao['status']}'),
-                      Text('📅 Data do status: ${evolucao['data_status']}'),
-                    ],
+                  title: Text(
+                      '📅 Data da visita: ${formatarData(evolucao['data_visita'])}'),
+                  subtitle: Text('📝 Observação: ${evolucao['observacao']}'),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.edit),
+                    onPressed: () =>
+                        _cadastrarOuEditarEvolucao(evolucao: evolucao),
                   ),
                 ),
               );
@@ -124,7 +156,7 @@ class _EvolucaoScreenState extends State<EvolucaoScreen> {
         },
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _adicionarEvolucao,
+        onPressed: () => _cadastrarOuEditarEvolucao(),
         child: const Icon(Icons.add),
       ),
     );
